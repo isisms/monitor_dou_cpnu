@@ -1,5 +1,6 @@
 from __future__ import annotations
-
+from config import BROWSER_CHANNEL
+import os
 from pathlib import Path
 from urllib.parse import quote_plus
 import re
@@ -298,12 +299,24 @@ def coletar_links_por_termo(page, termo: str, pausa: float = 2.0) -> list[str]:
     links = extrair_links_dou_do_html(html)
     return links
 
+def abrir_navegador(playwright):
+    # GitHub Actions define a variável GITHUB_ACTIONS=true
+    em_github_actions = os.getenv("GITHUB_ACTIONS") == "true"
+
+    if em_github_actions:
+        return playwright.chromium.launch(headless=True)
+
+    if BROWSER_CHANNEL:
+        return playwright.chromium.launch(channel=BROWSER_CHANNEL, headless=True)
+
+    return playwright.chromium.launch(headless=True)
+
 
 def coletar_materias_dou(termos: list[str]) -> pd.DataFrame:
     registros = []
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(channel=BROWSER_CHANNEL, headless=True)
+        browser = abrir_navegador(p)
         page = browser.new_page()
 
         for termo in termos:
