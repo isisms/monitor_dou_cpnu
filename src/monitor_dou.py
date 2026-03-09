@@ -9,13 +9,13 @@ from alerta_telegram import enviar_mensagem_telegram
 
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-CAMINHO_HISTORICO = BASE_DIR / "output" / "planilhas" / "historico_monitoramento_dou.xlsx"
-CAMINHO_NOVIDADES = BASE_DIR / "output" / "planilhas" / "novidades_dou.xlsx"
+CAMINHO_HISTORICO = BASE_DIR / "storage" / "historico_monitoramento_dou.csv"
+CAMINHO_NOVIDADES = BASE_DIR / "storage" / "novidades_dou.csv"
 
 
 def carregar_historico() -> pd.DataFrame:
     if CAMINHO_HISTORICO.exists():
-        return pd.read_excel(CAMINHO_HISTORICO)
+        return pd.read_csv(CAMINHO_HISTORICO)
     return pd.DataFrame()
 
 
@@ -53,13 +53,13 @@ def salvar_historico(df_historico: pd.DataFrame, df_novidades: pd.DataFrame) -> 
         df_final = df_final.drop_duplicates(subset=["link"]).reset_index(drop=True)
 
     CAMINHO_HISTORICO.parent.mkdir(parents=True, exist_ok=True)
-    df_final.to_excel(CAMINHO_HISTORICO, index=False)
+    df_final.to_csv(CAMINHO_HISTORICO, index=False, encoding="utf-8-sig")
     return df_final
 
 
 def salvar_novidades(df_novidades: pd.DataFrame) -> None:
     CAMINHO_NOVIDADES.parent.mkdir(parents=True, exist_ok=True)
-    df_novidades.to_excel(CAMINHO_NOVIDADES, index=False)
+    df_novidades.to_csv(CAMINHO_NOVIDADES, index=False, encoding="utf-8-sig")
 
 
 def montar_resumo_telegram(df_novidades: pd.DataFrame) -> str:
