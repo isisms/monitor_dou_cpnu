@@ -3,10 +3,10 @@ name: Monitor DOU
 on:
   workflow_dispatch:
   schedule:
-    - cron: "13 10 * * *"
-    - cron: "11 16 * * *"
-    - cron: "17 18 * * *"
-    - cron: "19 00 * * *"
+    - cron: "13 09 * * *"
+    - cron: "11 15 * * *"
+    - cron: "15 17 * * *"
+    - cron: "19 23 * * *"
 
 permissions:
   contents: write
