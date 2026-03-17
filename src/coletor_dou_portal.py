@@ -28,7 +28,7 @@ BROWSER_CHANNEL = "msedge"
 TERMOS_CPNU = [
     "cpnu",
     "concurso publico nacional unificado",
-    "concurso nacional unificado",
+    "concurso público nacional unificado",
 ]
 
 TERMOS_ATDS = [
@@ -37,6 +37,37 @@ TERMOS_ATDS = [
     "carreira de desenvolvimento socioeconomico",
 ]
 
+TERMOS_EXCLUSAO = [
+    "justica eleitoral",
+    "justiça eleitoral",
+    "tribunal superior eleitoral",
+    "tribunal regional eleitoral",
+    "tse",
+    "tre",
+    "concurso publico nacional unificado da justica eleitoral",
+    "concurso público nacional unificado da justiça eleitoral",
+]
+
+TERMOS_CNU2 = [
+    "concurso publico nacional unificado 2",
+    "concurso público nacional unificado 2",
+    "edital enap nº 114/2025",
+    "edital enap n 114/2025",
+    "edital enap no 114/2025",
+    "edital enap nº 114/2025 - concurso publico nacional unificado",
+    "edital enap nº 114/2025 - concurso público nacional unificado",
+    "30 de junho de 2025",
+]
+
+TERMOS_CNU1 = [
+    "edital nº 05/2024",
+    "edital n 05/2024",
+    "edital no 05/2024",
+    "edital n° 05/2024",
+    "publicado no diario oficial da uniao de 10 de janeiro de 2024",
+    "publicado no diário oficial da união de 10 de janeiro de 2024",
+    "10 de janeiro de 2024",
+]
 
 def normalizar_texto(texto: str) -> str:
     texto = texto.lower().strip()
@@ -98,6 +129,24 @@ def extrair_titulo_real(soup: BeautifulSoup) -> str:
     titulo = re.sub(r"\s{2,}", " ", titulo).strip()
 
     return titulo
+
+def identificar_concurso_edicao(titulo: str, trecho: str) -> str:
+    texto = normalizar_texto(f"{titulo} {trecho}")
+
+    if any(t in texto for t in TERMOS_EXCLUSAO):
+        return "EXCLUIR"
+
+    tem_cnu2 = any(t in texto for t in TERMOS_CNU2)
+    tem_cnu1 = any(t in texto for t in TERMOS_CNU1)
+
+    if tem_cnu2 and not tem_cnu1:
+        return "CNU2"
+    if tem_cnu1 and not tem_cnu2:
+        return "CNU1"
+    if tem_cnu1 and tem_cnu2:
+        return "AMBIGUO"
+
+    return "NAO_IDENTIFICADO"
 
 def extrair_corpo_util(texto_completo: str, titulo: str) -> str:
     texto = texto_completo
@@ -220,6 +269,9 @@ def marcar_publicado_hoje(data_publicacao: str) -> str:
 def classificar_relevancia(titulo: str, trecho: str) -> str:
     texto = normalizar_texto(f"{titulo} {trecho}")
 
+    if any(t in texto for t in TERMOS_EXCLUSAO):
+        return "EXCLUIR"
+
     tem_cpnu = any(t in texto for t in TERMOS_CPNU)
     tem_atds = any(t in texto for t in TERMOS_ATDS)
 
@@ -246,7 +298,7 @@ def extrair_metadados_materia(html: str, link: str, termo: str) -> dict:
 
     m_pub = re.search(
         r"Publicado em:\s*([0-9]{2}/[0-9]{2}/[0-9]{4})\s*\|\s*Edição:\s*([^|]+)\|\s*Seção:\s*([^|]+)\|\s*Página:\s*(.+)",
-        texto_completo
+        texto_completo,
     )
     if m_pub:
         publicado_em = limpar_texto(m_pub.group(1))
@@ -254,7 +306,10 @@ def extrair_metadados_materia(html: str, link: str, termo: str) -> dict:
         secao = limpar_texto(m_pub.group(3))
         pagina = limpar_texto(m_pub.group(4).split("Órgão:")[0])
 
-    m_orgao = re.search(r"Órgão:\s*(.+?)\s*(?:EDITAL|PORTARIA|RESOLUÇÃO|EXTRATO|DESPACHO|INSTRUÇÃO|$)", texto_completo)
+    m_orgao = re.search(
+        r"Órgão:\s*(.+?)\s*(?:EDITAL|PORTARIA|RESOLUÇÃO|EXTRATO|DESPACHO|INSTRUÇÃO|$)",
+        texto_completo,
+    )
     if m_orgao:
         orgao = limpar_texto(m_orgao.group(1))
 
@@ -269,6 +324,7 @@ def extrair_metadados_materia(html: str, link: str, termo: str) -> dict:
 
     trecho = extrair_corpo_util(texto_completo, titulo)
     categoria = classificar_relevancia(titulo, trecho)
+    concurso_edicao = identificar_concurso_edicao(titulo, trecho)
     tipo_ato = identificar_tipo_ato(titulo, trecho)
     prioridade = identificar_prioridade(titulo, trecho, categoria)
     publicado_hoje = marcar_publicado_hoje(publicado_em)
@@ -276,6 +332,7 @@ def extrair_metadados_materia(html: str, link: str, termo: str) -> dict:
     return {
         "termo_busca": termo,
         "categoria": categoria,
+        "concurso_edicao": concurso_edicao,
         "prioridade": prioridade,
         "tipo_ato": tipo_ato,
         "publicado_hoje": publicado_hoje,
@@ -288,7 +345,6 @@ def extrair_metadados_materia(html: str, link: str, termo: str) -> dict:
         "link": link,
         "trecho_texto": trecho,
     }
-
 
 def coletar_links_por_termo(page, termo: str, pausa: float = 2.0) -> list[str]:
     url = montar_url_busca(termo)
@@ -377,8 +433,9 @@ if __name__ == "__main__":
         print("\nResumo por prioridade:")
         print(df_resultado["prioridade"].value_counts(dropna=False))
 
-        df_filtrado = df_resultado[df_resultado["categoria"] != "OUTRO"].copy()
-
+        df_filtrado = df_resultado[
+            ~df_resultado["categoria"].isin(["OUTRO", "EXCLUIR"])
+        ].copy()
         colunas_ordem = [
             "termo_busca",
             "categoria",

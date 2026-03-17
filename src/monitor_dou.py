@@ -65,7 +65,7 @@ def salvar_novidades(df_novidades: pd.DataFrame) -> None:
 def montar_resumo_telegram(df_novidades: pd.DataFrame) -> str:
     if df_novidades.empty:
         return "Monitor DOU: nenhuma novidade encontrada."
-
+    
     total = len(df_novidades)
     altas = (df_novidades["prioridade"] == "ALTA").sum() if "prioridade" in df_novidades.columns else 0
     medias = (df_novidades["prioridade"] == "MEDIA").sum() if "prioridade" in df_novidades.columns else 0
@@ -97,8 +97,9 @@ def montar_resumo_telegram(df_novidades: pd.DataFrame) -> str:
         prioridade = str(row.get("prioridade", ""))
         tipo_ato = str(row.get("tipo_ato", ""))
         link = str(row.get("link", ""))
+        concurso_edicao = str(row.get("concurso_edicao", ""))
 
-        linhas.append(f"{i}. [{prioridade}] [{categoria}] [{tipo_ato}] {data_pub}")
+        linhas.append(f"{i}. [{prioridade}] [{categoria}] [{concurso_edicao}] [{tipo_ato}] {data_pub}")
         linhas.append(titulo)
         linhas.append(link)
         linhas.append("")
@@ -114,7 +115,6 @@ def marcar_alerta_enviado(df_novidades: pd.DataFrame) -> pd.DataFrame:
     df_novidades["alerta_enviado"] = "SIM"
     return df_novidades
 
-
 if __name__ == "__main__":
     print("Iniciando monitoramento do DOU...")
     df_coleta = coletar_materias_dou(TERMOS_BUSCA)
@@ -122,9 +122,23 @@ if __name__ == "__main__":
     if df_coleta.empty:
         print("Nenhum registro coletado.")
     else:
-        # mantém apenas o que foi classificado como relevante
-        df_coleta = df_coleta[df_coleta["categoria"] != "OUTRO"].copy()
+        df_coleta = df_coleta[
+            ~df_coleta["categoria"].isin(["OUTRO", "EXCLUIR"])
+        ].copy()
+
         df_coleta = preparar_dataframe(df_coleta)
+
+        colunas_esperadas = {
+            "categoria": "OUTRO",
+            "concurso_edicao": "NAO_IDENTIFICADO",
+            "prioridade": "BAIXA",
+            "tipo_ato": "OUTRO",
+            "publicado_hoje": "NAO",
+        }
+
+        for coluna, valor_padrao in colunas_esperadas.items():
+            if coluna not in df_coleta.columns:
+                df_coleta[coluna] = valor_padrao
 
         df_historico = carregar_historico()
         df_novidades = identificar_novidades(df_coleta, df_historico)
@@ -133,7 +147,9 @@ if __name__ == "__main__":
         print(f"Novidades encontradas: {len(df_novidades)}")
 
         if not df_novidades.empty:
-            # recorte apenas para o alerta do Telegram
+            if "prioridade" not in df_novidades.columns:
+                df_novidades["prioridade"] = "BAIXA"
+
             df_alerta = df_novidades[
                 df_novidades["prioridade"].isin(["ALTA", "MEDIA"])
             ].copy()
@@ -147,7 +163,6 @@ if __name__ == "__main__":
             else:
                 print("Houve novidades, mas nenhuma de prioridade ALTA ou MEDIA.")
 
-            # marca todas as novidades como processadas no histórico
             df_novidades = marcar_alerta_enviado(df_novidades)
 
         salvar_novidades(df_novidades)
