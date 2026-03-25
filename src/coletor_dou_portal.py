@@ -1,19 +1,21 @@
 from __future__ import annotations
-from config import BROWSER_CHANNEL
-import os
+
 from pathlib import Path
 from urllib.parse import quote_plus
+from datetime import datetime
+import os
 import re
-import time
 import unicodedata
 
 import pandas as pd
 from bs4 import BeautifulSoup
 from playwright.sync_api import sync_playwright
 
+from config import BROWSER_CHANNEL
+
 
 BASE_DIR = Path(__file__).resolve().parent.parent
-OUTPUT_PATH = BASE_DIR / "output" / "planilhas" / "coleta_dou_portal_v2.xlsx"
+OUTPUT_PATH = BASE_DIR / "output" / "planilhas" / "coleta_dou_portal_v3.xlsx"
 
 TERMOS_BUSCA = [
     "CPNU 2",
@@ -23,12 +25,10 @@ TERMOS_BUSCA = [
     "ATDS",
 ]
 
-BROWSER_CHANNEL = "msedge"
-
 TERMOS_CPNU = [
     "cpnu",
     "concurso publico nacional unificado",
-    "concurso público nacional unificado",
+    "concurso nacional unificado",
 ]
 
 TERMOS_ATDS = [
@@ -37,37 +37,6 @@ TERMOS_ATDS = [
     "carreira de desenvolvimento socioeconomico",
 ]
 
-TERMOS_EXCLUSAO = [
-    "justica eleitoral",
-    "justiça eleitoral",
-    "tribunal superior eleitoral",
-    "tribunal regional eleitoral",
-    "tse",
-    "tre",
-    "concurso publico nacional unificado da justica eleitoral",
-    "concurso público nacional unificado da justiça eleitoral",
-]
-
-TERMOS_CNU2 = [
-    "concurso publico nacional unificado 2",
-    "concurso público nacional unificado 2",
-    "edital enap nº 114/2025",
-    "edital enap n 114/2025",
-    "edital enap no 114/2025",
-    "edital enap nº 114/2025 - concurso publico nacional unificado",
-    "edital enap nº 114/2025 - concurso público nacional unificado",
-    "30 de junho de 2025",
-]
-
-TERMOS_CNU1 = [
-    "edital nº 05/2024",
-    "edital n 05/2024",
-    "edital no 05/2024",
-    "edital n° 05/2024",
-    "publicado no diario oficial da uniao de 10 de janeiro de 2024",
-    "publicado no diário oficial da união de 10 de janeiro de 2024",
-    "10 de janeiro de 2024",
-]
 
 def normalizar_texto(texto: str) -> str:
     texto = texto.lower().strip()
@@ -97,7 +66,7 @@ def extrair_links_dou_do_html(html: str) -> list[str]:
             if href.startswith("/"):
                 href = f"https://www.in.gov.br{href}"
             elif href.startswith("http"):
-                href = href
+                pass
             else:
                 href = f"https://www.in.gov.br/{href.lstrip('/')}"
             links.append(href)
@@ -124,44 +93,23 @@ def extrair_titulo_real(soup: BeautifulSoup) -> str:
                 titulo = txt
                 break
 
-    # limpeza final do sufixo do portal
     titulo = re.sub(r"\s*-\s*DOU\s*-\s*Imprensa Nacional\s*$", "", titulo, flags=re.IGNORECASE)
     titulo = re.sub(r"\s{2,}", " ", titulo).strip()
 
     return titulo
 
-def identificar_concurso_edicao(titulo: str, trecho: str) -> str:
-    texto = normalizar_texto(f"{titulo} {trecho}")
-
-    if any(t in texto for t in TERMOS_EXCLUSAO):
-        return "EXCLUIR"
-
-    tem_cnu2 = any(t in texto for t in TERMOS_CNU2)
-    tem_cnu1 = any(t in texto for t in TERMOS_CNU1)
-
-    if tem_cnu2 and not tem_cnu1:
-        return "CNU2"
-    if tem_cnu1 and not tem_cnu2:
-        return "CNU1"
-    if tem_cnu1 and tem_cnu2:
-        return "AMBIGUO"
-
-    return "NAO_IDENTIFICADO"
 
 def extrair_corpo_util(texto_completo: str, titulo: str) -> str:
     texto = texto_completo
 
-    # corta tudo antes de "Publicado em:"
     if "Publicado em:" in texto:
         texto = texto.split("Publicado em:", 1)[1]
         texto = "Publicado em:" + texto
 
-    # corta tudo antes do órgão, se existir
     if "Órgão:" in texto:
         texto = texto.split("Órgão:", 1)[1]
         texto = "Órgão:" + texto
 
-    # remove excesso de cabeçalhos repetidos
     lixo_inicio = [
         "Você precisa habilitar o JavaScript",
         "Ir para o conteúdo",
@@ -188,7 +136,6 @@ def extrair_corpo_util(texto_completo: str, titulo: str) -> str:
     for item in lixo_inicio:
         texto = texto.replace(item, " ")
 
-    # remove repetições do título no começo
     if titulo:
         texto = texto.replace(f"{titulo} - {titulo}", titulo)
         texto = texto.replace(f"{titulo} {titulo}", titulo)
@@ -197,6 +144,22 @@ def extrair_corpo_util(texto_completo: str, titulo: str) -> str:
     texto = re.sub(r"\s+", " ", texto).strip()
 
     return texto[:3000]
+
+
+def classificar_relevancia(titulo: str, trecho: str) -> str:
+    texto = normalizar_texto(f"{titulo} {trecho}")
+
+    tem_cpnu = any(t in texto for t in TERMOS_CPNU)
+    tem_atds = any(t in texto for t in TERMOS_ATDS)
+
+    if tem_cpnu and tem_atds:
+        return "CPNU_ATDS"
+    if tem_cpnu:
+        return "CPNU"
+    if tem_atds:
+        return "ATDS"
+    return "OUTRO"
+
 
 def identificar_tipo_ato(titulo: str, trecho: str) -> str:
     texto = normalizar_texto(f"{titulo} {trecho}")
@@ -252,8 +215,6 @@ def identificar_prioridade(titulo: str, trecho: str, categoria: str) -> str:
 
     return "BAIXA"
 
-from datetime import datetime
-
 
 def marcar_publicado_hoje(data_publicacao: str) -> str:
     if not data_publicacao:
@@ -265,23 +226,6 @@ def marcar_publicado_hoje(data_publicacao: str) -> str:
         return "SIM" if data_pub == hoje else "NAO"
     except Exception:
         return "NAO"
-
-def classificar_relevancia(titulo: str, trecho: str) -> str:
-    texto = normalizar_texto(f"{titulo} {trecho}")
-
-    if any(t in texto for t in TERMOS_EXCLUSAO):
-        return "EXCLUIR"
-
-    tem_cpnu = any(t in texto for t in TERMOS_CPNU)
-    tem_atds = any(t in texto for t in TERMOS_ATDS)
-
-    if tem_cpnu and tem_atds:
-        return "CPNU_ATDS"
-    if tem_cpnu:
-        return "CPNU"
-    if tem_atds:
-        return "ATDS"
-    return "OUTRO"
 
 
 def extrair_metadados_materia(html: str, link: str, termo: str) -> dict:
@@ -298,7 +242,7 @@ def extrair_metadados_materia(html: str, link: str, termo: str) -> dict:
 
     m_pub = re.search(
         r"Publicado em:\s*([0-9]{2}/[0-9]{2}/[0-9]{4})\s*\|\s*Edição:\s*([^|]+)\|\s*Seção:\s*([^|]+)\|\s*Página:\s*(.+)",
-        texto_completo,
+        texto_completo
     )
     if m_pub:
         publicado_em = limpar_texto(m_pub.group(1))
@@ -308,7 +252,7 @@ def extrair_metadados_materia(html: str, link: str, termo: str) -> dict:
 
     m_orgao = re.search(
         r"Órgão:\s*(.+?)\s*(?:EDITAL|PORTARIA|RESOLUÇÃO|EXTRATO|DESPACHO|INSTRUÇÃO|$)",
-        texto_completo,
+        texto_completo
     )
     if m_orgao:
         orgao = limpar_texto(m_orgao.group(1))
@@ -324,7 +268,6 @@ def extrair_metadados_materia(html: str, link: str, termo: str) -> dict:
 
     trecho = extrair_corpo_util(texto_completo, titulo)
     categoria = classificar_relevancia(titulo, trecho)
-    concurso_edicao = identificar_concurso_edicao(titulo, trecho)
     tipo_ato = identificar_tipo_ato(titulo, trecho)
     prioridade = identificar_prioridade(titulo, trecho, categoria)
     publicado_hoje = marcar_publicado_hoje(publicado_em)
@@ -332,7 +275,6 @@ def extrair_metadados_materia(html: str, link: str, termo: str) -> dict:
     return {
         "termo_busca": termo,
         "categoria": categoria,
-        "concurso_edicao": concurso_edicao,
         "prioridade": prioridade,
         "tipo_ato": tipo_ato,
         "publicado_hoje": publicado_hoje,
@@ -346,21 +288,19 @@ def extrair_metadados_materia(html: str, link: str, termo: str) -> dict:
         "trecho_texto": trecho,
     }
 
-def coletar_links_por_termo(page, termo: str, pausa: float = 2.0) -> list[str]:
-    url = montar_url_busca(termo)
-    page.goto(url, wait_until="domcontentloaded", timeout=60000)
-    time.sleep(pausa)
-
-    html = page.content()
-    links = extrair_links_dou_do_html(html)
-    return links
 
 def abrir_navegador(playwright):
-    # GitHub Actions define a variável GITHUB_ACTIONS=true
     em_github_actions = os.getenv("GITHUB_ACTIONS") == "true"
 
     if em_github_actions:
-        return playwright.chromium.launch(headless=True)
+        return playwright.chromium.launch(
+            headless=True,
+            args=[
+                "--disable-blink-features=AutomationControlled",
+                "--no-sandbox",
+                "--disable-dev-shm-usage",
+            ]
+        )
 
     if BROWSER_CHANNEL:
         return playwright.chromium.launch(channel=BROWSER_CHANNEL, headless=True)
@@ -368,12 +308,45 @@ def abrir_navegador(playwright):
     return playwright.chromium.launch(headless=True)
 
 
+def coletar_links_por_termo(page, termo: str, pausa: float = 5.0) -> list[str]:
+    url = montar_url_busca(termo)
+    print(f"  URL de busca: {url}")
+
+    page.goto(url, wait_until="domcontentloaded", timeout=60000)
+    page.wait_for_timeout(int(pausa * 1000))
+
+    try:
+        page.wait_for_load_state("networkidle", timeout=10000)
+    except Exception:
+        pass
+
+    html = page.content()
+
+    diagnostico_dir = BASE_DIR / "storage" / "debug_busca"
+    diagnostico_dir.mkdir(parents=True, exist_ok=True)
+
+    nome_arquivo = re.sub(r"[^a-zA-Z0-9]+", "_", termo).strip("_").lower()
+    html_path = diagnostico_dir / f"{nome_arquivo}.html"
+    png_path = diagnostico_dir / f"{nome_arquivo}.png"
+
+    html_path.write_text(html, encoding="utf-8")
+    page.screenshot(path=str(png_path), full_page=True)
+
+    print("  Tamanho do HTML:", len(html))
+    print("  Início do HTML:")
+    print(html[:1000])
+
+    return extrair_links_dou_do_html(html)
+
+
 def coletar_materias_dou(termos: list[str]) -> pd.DataFrame:
     registros = []
 
     with sync_playwright() as p:
         browser = abrir_navegador(p)
-        page = browser.new_page()
+        page = browser.new_page(
+            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+        )
 
         for termo in termos:
             print(f"Buscando termo: {termo}")
@@ -383,7 +356,13 @@ def coletar_materias_dou(termos: list[str]) -> pd.DataFrame:
             for link in links:
                 try:
                     page.goto(link, wait_until="domcontentloaded", timeout=60000)
-                    time.sleep(1.5)
+                    page.wait_for_timeout(1500)
+
+                    try:
+                        page.wait_for_load_state("networkidle", timeout=8000)
+                    except Exception:
+                        pass
+
                     html_materia = page.content()
 
                     registro = extrair_metadados_materia(
@@ -397,6 +376,9 @@ def coletar_materias_dou(termos: list[str]) -> pd.DataFrame:
                     registros.append({
                         "termo_busca": termo,
                         "categoria": "ERRO",
+                        "prioridade": "BAIXA",
+                        "tipo_ato": "OUTRO",
+                        "publicado_hoje": "NAO",
                         "titulo": "",
                         "data_publicacao": "",
                         "edicao": "",
@@ -433,9 +415,8 @@ if __name__ == "__main__":
         print("\nResumo por prioridade:")
         print(df_resultado["prioridade"].value_counts(dropna=False))
 
-        df_filtrado = df_resultado[
-            ~df_resultado["categoria"].isin(["OUTRO", "EXCLUIR"])
-        ].copy()
+        df_filtrado = df_resultado[df_resultado["categoria"] != "OUTRO"].copy()
+
         colunas_ordem = [
             "termo_busca",
             "categoria",
