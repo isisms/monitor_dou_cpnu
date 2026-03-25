@@ -28,13 +28,24 @@ TERMOS_BUSCA = [
 TERMOS_CPNU = [
     "cpnu",
     "concurso publico nacional unificado",
-    "concurso nacional unificado",
+    "concurso público nacional unificado",
 ]
 
 TERMOS_ATDS = [
     "atds",
     "analista tecnico de desenvolvimento socioeconomico",
+    "analista técnico de desenvolvimento socioeconômico",
     "carreira de desenvolvimento socioeconomico",
+]
+
+# EXCLUSÃO MÍNIMA: Justiça Eleitoral
+TERMOS_EXCLUSAO = [
+    "justica eleitoral",
+    "justiça eleitoral",
+    "tribunal superior eleitoral",
+    "tribunal regional eleitoral",
+    "concurso publico nacional unificado da justica eleitoral",
+    "concurso público nacional unificado da justiça eleitoral",
 ]
 
 
@@ -65,9 +76,7 @@ def extrair_links_dou_do_html(html: str) -> list[str]:
         if "/web/dou/-/" in href:
             if href.startswith("/"):
                 href = f"https://www.in.gov.br{href}"
-            elif href.startswith("http"):
-                pass
-            else:
+            elif not href.startswith("http"):
                 href = f"https://www.in.gov.br/{href.lstrip('/')}"
             links.append(href)
 
@@ -95,7 +104,6 @@ def extrair_titulo_real(soup: BeautifulSoup) -> str:
 
     titulo = re.sub(r"\s*-\s*DOU\s*-\s*Imprensa Nacional\s*$", "", titulo, flags=re.IGNORECASE)
     titulo = re.sub(r"\s{2,}", " ", titulo).strip()
-
     return titulo
 
 
@@ -148,6 +156,10 @@ def extrair_corpo_util(texto_completo: str, titulo: str) -> str:
 
 def classificar_relevancia(titulo: str, trecho: str) -> str:
     texto = normalizar_texto(f"{titulo} {trecho}")
+
+    # EXCLUSÃO MÍNIMA: se for Justiça Eleitoral, trata como OUTRO
+    if any(t in texto for t in TERMOS_EXCLUSAO):
+        return "OUTRO"
 
     tem_cpnu = any(t in texto for t in TERMOS_CPNU)
     tem_atds = any(t in texto for t in TERMOS_ATDS)
@@ -242,7 +254,7 @@ def extrair_metadados_materia(html: str, link: str, termo: str) -> dict:
 
     m_pub = re.search(
         r"Publicado em:\s*([0-9]{2}/[0-9]{2}/[0-9]{4})\s*\|\s*Edição:\s*([^|]+)\|\s*Seção:\s*([^|]+)\|\s*Página:\s*(.+)",
-        texto_completo
+        texto_completo,
     )
     if m_pub:
         publicado_em = limpar_texto(m_pub.group(1))
@@ -252,7 +264,7 @@ def extrair_metadados_materia(html: str, link: str, termo: str) -> dict:
 
     m_orgao = re.search(
         r"Órgão:\s*(.+?)\s*(?:EDITAL|PORTARIA|RESOLUÇÃO|EXTRATO|DESPACHO|INSTRUÇÃO|$)",
-        texto_completo
+        texto_completo,
     )
     if m_orgao:
         orgao = limpar_texto(m_orgao.group(1))
@@ -299,7 +311,7 @@ def abrir_navegador(playwright):
                 "--disable-blink-features=AutomationControlled",
                 "--no-sandbox",
                 "--disable-dev-shm-usage",
-            ]
+            ],
         )
 
     if BROWSER_CHANNEL:
@@ -345,7 +357,11 @@ def coletar_materias_dou(termos: list[str]) -> pd.DataFrame:
     with sync_playwright() as p:
         browser = abrir_navegador(p)
         page = browser.new_page(
-            user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+            user_agent=(
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                "AppleWebKit/537.36 (KHTML, like Gecko) "
+                "Chrome/122.0.0.0 Safari/537.36"
+            )
         )
 
         for termo in termos:
@@ -373,21 +389,23 @@ def coletar_materias_dou(termos: list[str]) -> pd.DataFrame:
                     registros.append(registro)
 
                 except Exception as e:
-                    registros.append({
-                        "termo_busca": termo,
-                        "categoria": "ERRO",
-                        "prioridade": "BAIXA",
-                        "tipo_ato": "OUTRO",
-                        "publicado_hoje": "NAO",
-                        "titulo": "",
-                        "data_publicacao": "",
-                        "edicao": "",
-                        "secao": "",
-                        "pagina": "",
-                        "orgao": "",
-                        "link": link,
-                        "trecho_texto": f"ERRO NA COLETA DA MATÉRIA: {e}",
-                    })
+                    registros.append(
+                        {
+                            "termo_busca": termo,
+                            "categoria": "ERRO",
+                            "prioridade": "BAIXA",
+                            "tipo_ato": "OUTRO",
+                            "publicado_hoje": "NAO",
+                            "titulo": "",
+                            "data_publicacao": "",
+                            "edicao": "",
+                            "secao": "",
+                            "pagina": "",
+                            "orgao": "",
+                            "link": link,
+                            "trecho_texto": f"ERRO NA COLETA DA MATÉRIA: {e}",
+                        }
+                    )
 
         browser.close()
 
