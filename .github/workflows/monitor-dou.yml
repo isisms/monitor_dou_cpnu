@@ -8,8 +8,8 @@ on:
   workflow_dispatch:
   schedule:
     - cron: "07 08 * * *"
-    - cron: "23 15 * * *"
-    - cron: "17 18 * * *"
+    - cron: "23 10 * * *"
+    - cron: "17 15 * * *"
     - cron: "19 00 * * *"
 
 permissions:
