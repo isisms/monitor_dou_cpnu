@@ -7,7 +7,7 @@ concurrency:
 on:
   workflow_dispatch:
   schedule:
-    - cron: "07 10 * * *"
+    - cron: "07 08 * * *"
     - cron: "23 15 * * *"
     - cron: "17 18 * * *"
     - cron: "19 00 * * *"
