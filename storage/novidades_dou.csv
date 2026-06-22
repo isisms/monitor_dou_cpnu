@@ -1,1 +1,9 @@
 ﻿termo_busca,categoria,prioridade,tipo_ato,publicado_hoje,titulo,data_publicacao,edicao,secao,pagina,orgao,link,trecho_texto,data_coleta,hora_coleta,alerta_enviado
+Concurso Público Nacional Unificado,ERRO,BAIXA,OUTRO,NAO,,,,,,,https://www.in.gov.br/web/dou/-/portaria-n-1.050-de-19-de-junho-de-2026-713648777,"ERRO NA COLETA DA MATÉRIA: Page.goto: Timeout 60000ms exceeded.
+Call log:
+  - navigating to ""https://www.in.gov.br/web/dou/-/portaria-n-1.050-de-19-de-junho-de-2026-713648777"", waiting until ""domcontentloaded""
+",22/06/2026,05:52:18,SIM
+Analista Técnico de Desenvolvimento Socioeconômico,ERRO,BAIXA,OUTRO,NAO,,,,,,,https://www.in.gov.br/web/dou/-/decreto-n-12.904-de-27-de-marco-de-2026-696073499,"ERRO NA COLETA DA MATÉRIA: Page.goto: Timeout 60000ms exceeded.
+Call log:
+  - navigating to ""https://www.in.gov.br/web/dou/-/decreto-n-12.904-de-27-de-marco-de-2026-696073499"", waiting until ""domcontentloaded""
+",22/06/2026,05:52:18,SIM
