@@ -7,6 +7,7 @@ concurrency:
 on:
   workflow_dispatch:
   schedule:
+    - cron: "15 06 * * *"
     - cron: "07 08 * * *"
     - cron: "23 10 * * *"
     - cron: "17 15 * * *"
@@ -25,10 +26,10 @@ jobs:
 
     steps:
       - name: Baixar repositório
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Configurar Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@v6
         with:
           python-version: "3.11"
           cache: "pip"
@@ -42,9 +43,26 @@ jobs:
         run: |
           python -m playwright install --with-deps chromium
 
-      - name: Rodar monitor
+      - name: Rodar monitor com tentativas
+        shell: bash
         run: |
-          python src/monitor_dou.py
+          for i in 1 2 3 4 5; do
+            echo "Tentativa $i de 5..."
+
+            if python src/monitor_dou.py; then
+              echo "Monitor DOU executado com sucesso."
+              exit 0
+            fi
+
+            echo "Falha na tentativa $i."
+            echo "Aguardando antes de tentar novamente..."
+            sleep $((i * 120))
+          done
+
+          echo "Monitor DOU falhou após 5 tentativas."
+          echo "Possível instabilidade no site do DOU/Imprensa Nacional ou erro temporário de conexão."
+          echo "Não interpretar esta falha como ausência de publicação."
+          exit 1
 
       - name: Commit do histórico
         run: |
