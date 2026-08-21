@@ -1,5 +1,1 @@
 ﻿termo_busca,categoria,prioridade,tipo_ato,publicado_hoje,titulo,data_publicacao,edicao,secao,pagina,orgao,link,trecho_texto,data_coleta,hora_coleta,alerta_enviado
-CPNU 2,ERRO,BAIXA,OUTRO,NAO,,,,,,,https://www.in.gov.br/web/dou/-/portaria-de-pessoal-gm/mpo-n-558-de-17-de-agosto-de-2026-726164383,"ERRO NA COLETA DA MATÉRIA: Page.goto: Timeout 60000ms exceeded.
-Call log:
-  - navigating to ""https://www.in.gov.br/web/dou/-/portaria-de-pessoal-gm/mpo-n-558-de-17-de-agosto-de-2026-726164383"", waiting until ""domcontentloaded""
-",21/08/2026,08:57:44,SIM
